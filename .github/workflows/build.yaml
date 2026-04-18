@@ -43,8 +43,18 @@ jobs:
   trigger-update:
     runs-on: ubuntu-latest
     needs: build-and-push
-    uses: ./.github/workflows/update-gitops.yaml
-    with:
-      image_tag: ${{ needs.build-and-push.outputs.image_tag }}
-      image_repository: ghcr.io/okccl/sample-service
-    secrets: inherit
+    steps:
+      - name: update-gitopsワークフローをdispatch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'update-gitops.yaml',
+              ref: 'main',
+              inputs: {
+                image_tag: '${{ needs.build-and-push.outputs.image_tag }}',
+                image_repository: 'ghcr.io/okccl/sample-service'
+              }
+            })
