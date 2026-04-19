@@ -17,6 +17,9 @@ DB_NAME = os.getenv("DB_NAME", "app")
 DB_USER = os.getenv("DB_USER", "app")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
+class Item(BaseModel):
+    name: str
+
 async def get_conn():
     return await asyncpg.connect(
         host=DB_HOST,
@@ -28,7 +31,6 @@ async def get_conn():
 
 @app.on_event("startup")
 async def startup():
-    # DB接続失敗時もアプリは起動させる
     try:
         conn = await get_conn()
         await conn.execute("""
@@ -76,6 +78,3 @@ async def create_item(item: Item):
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-class Item(BaseModel):
-    name: str
