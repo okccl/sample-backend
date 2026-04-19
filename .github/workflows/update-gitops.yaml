@@ -1,5 +1,4 @@
 name: Update GitOps
-
 on:
   workflow_call:
     inputs:
@@ -17,7 +16,6 @@ on:
       image_repository:
         required: true
         type: string
-
 jobs:
   update-gitops:
     runs-on: ubuntu-latest
@@ -27,16 +25,14 @@ jobs:
         with:
           repository: okccl/platform-gitops
           token: ${{ secrets.GITOPS_TOKEN }}
-
       - name: imageの更新
         run: |
-          sed -i "s|^\(\s*repository:\s*\).*|\1${{ inputs.image_repository }}|" apps/sample-service/values.yaml
-          sed -i "s/^\(\s*tag:\s*\).*/\1${{ inputs.image_tag }}/" apps/sample-service/values.yaml
-
+          sed -i "s|^\(\s*repository:\s*\).*|\1${{ inputs.image_repository }}|" apps/sample-backend/values.yaml
+          sed -i "s/^\(\s*tag:\s*\).*/\1${{ inputs.image_tag }}/" apps/sample-backend/values.yaml
       - name: 変更をcommit & push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add apps/sample-service/values.yaml
-          git commit -m "chore: update sample-service image to ${{ inputs.image_repository }}:${{ inputs.image_tag }}"
+          git add apps/sample-backend/values.yaml
+          git commit -m "chore: update sample-backend image to ${{ inputs.image_repository }}:${{ inputs.image_tag }}"
           git push
