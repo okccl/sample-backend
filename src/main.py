@@ -4,13 +4,13 @@ from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 import asyncpg
 import os
+import logging
 
+logger = logging.getLogger("uvicorn")
 app = FastAPI(title="sample-backend")
 
-# メトリクス定義
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint"])
 
-# DB接続設定（CNPGが生成するSecretから環境変数で受け取る）
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "app")
@@ -26,21 +26,22 @@ async def get_conn():
         password=DB_PASSWORD,
     )
 
-class Item(BaseModel):
-    name: str
-
 @app.on_event("startup")
 async def startup():
-    # テーブルの初期化
-    conn = await get_conn()
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-    """)
-    await conn.close()
+    # DB接続失敗時もアプリは起動させる
+    try:
+        conn = await get_conn()
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS items (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.close()
+        logger.info("DB接続成功・テーブル初期化完了")
+    except Exception as e:
+        logger.warning(f"DB接続失敗（DBが未起動の可能性）: {e}")
 
 @app.get("/health")
 async def health():
@@ -50,22 +51,31 @@ async def health():
 @app.get("/items")
 async def list_items():
     REQUEST_COUNT.labels(method="GET", endpoint="/items").inc()
-    conn = await get_conn()
-    rows = await conn.fetch("SELECT id, name, created_at::text FROM items ORDER BY id")
-    await conn.close()
-    return [dict(r) for r in rows]
+    try:
+        conn = await get_conn()
+        rows = await conn.fetch("SELECT id, name, created_at::text FROM items ORDER BY id")
+        await conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB接続エラー: {e}")
 
 @app.post("/items", status_code=201)
 async def create_item(item: Item):
     REQUEST_COUNT.labels(method="POST", endpoint="/items").inc()
-    conn = await get_conn()
-    row = await conn.fetchrow(
-        "INSERT INTO items (name) VALUES ($1) RETURNING id, name, created_at::text",
-        item.name
-    )
-    await conn.close()
-    return dict(row)
+    try:
+        conn = await get_conn()
+        row = await conn.fetchrow(
+            "INSERT INTO items (name) VALUES ($1) RETURNING id, name, created_at::text",
+            item.name
+        )
+        await conn.close()
+        return dict(row)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB接続エラー: {e}")
 
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+class Item(BaseModel):
+    name: str
