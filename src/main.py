@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
@@ -22,6 +23,14 @@ tracer = trace.get_tracer(__name__)
 
 app = FastAPI(title="sample-backend")
 FastAPIInstrumentor.instrument_app(app)
+
+# CORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://sample-frontend.localhost"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint"])
 
