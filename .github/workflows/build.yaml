@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: okccl/sample-service
+  IMAGE_NAME: okccl/sample-backend
 
 jobs:
   build-and-push:
@@ -55,6 +55,6 @@ jobs:
               ref: 'main',
               inputs: {
                 image_tag: '${{ needs.build-and-push.outputs.image_tag }}',
-                image_repository: 'ghcr.io/okccl/sample-service'
+                image_repository: 'ghcr.io/okccl/sample-backend'
               }
             })
