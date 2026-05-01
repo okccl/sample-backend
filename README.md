@@ -15,8 +15,9 @@ FastAPI（Python 3.12）で実装し、**Observability・Stateful・Golden Path*
 |-------|------|
 | Phase 4 | OpenTelemetry による分散トレーシング（Tempo）と Prometheus メトリクス（`/metrics`）の実装 |
 | Phase 5 | `common-app` Library Chart を使い、最小限の `values.yaml` だけでデプロイ定義が完結することを示す |
-| Phase 6 | `main` へのpushで自動的にイメージビルド → GHCR プッシュ → `platform-gitops` への通知まで完結する Golden Path |
+| Phase 6 | `main` へのpushで自動的にイメージビルド → GHCR プッシュ → `platform-gitops` への PR 作成 → squash merge まで完結する Golden Path |
 | Phase 8 | `common-db` Library Chart でプロビジョニングされた PostgreSQL に接続し、Stateful なワークロードとして動作することを示す |
+| Phase 11 | PostgreSQL フェイルオーバー時の接続断からアプリが自動回復できることを示す（コネクションプール + リトライ処理） |
 
 ## ディレクトリ構成
 
@@ -24,7 +25,7 @@ FastAPI（Python 3.12）で実装し、**Observability・Stateful・Golden Path*
 sample-backend/
 ├── .github/workflows/
 │   ├── build.yaml            # CI: イメージビルド & GHCR プッシュ
-│   └── update-gitops.yaml    # CD: platform-gitops への image tag 更新通知
+│   └── update-gitops.yaml    # CD: platform-gitops への image tag 更新通知（PR 方式）
 ├── src/
 │   ├── main.py               # FastAPI アプリケーション本体
 │   └── requirements.txt
@@ -39,7 +40,7 @@ sample-backend/
 
 | Method | Path | 説明 |
 |--------|------|------|
-| `GET` | `/health` | ヘルスチェック |
+| `GET` | `/health` | ヘルスチェック（DB ping 含む） |
 | `GET` | `/items` | アイテム一覧取得（PostgreSQL） |
 | `POST` | `/items` | アイテム作成（PostgreSQL） |
 | `GET` | `/metrics` | Prometheus メトリクス（`ServiceMonitor` 経由で自動収集） |
@@ -67,6 +68,34 @@ Grafana の Tempo データソースからトレースを確認できる。
 http_requests_total{method="GET", endpoint="/items"} 42
 ```
 
+## PostgreSQL 接続の堅牢化（Phase 11）
+
+PostgreSQL フェイルオーバー発生時の接続断から自動回復できるよう、コネクションプールとリトライ処理を実装している。
+
+### コネクションプール
+
+`asyncpg.create_pool()` を使用。コネクションが切断されていた場合でも使用前に検知できる。
+
+| パラメータ | 値 |
+|---|---|
+| min_size | 2 |
+| max_size | 10 |
+| max_inactive_connection_lifetime | 30秒 |
+
+### リトライ処理
+
+`tenacity` による指数バックオフ付きリトライを実装。一時的な接続障害のみリトライ対象とし、アプリバグ起因のエラーはリトライしない。
+
+| パラメータ | 値 |
+|---|---|
+| 最大リトライ回数 | 5回 |
+| バックオフ | 指数（1〜16秒） |
+| リトライ対象 | `PostgresConnectionError` / `TooManyConnectionsError` / `OSError` |
+
+### /health の DB ping
+
+`/health` エンドポイントで `SELECT 1` による DB 疎通確認を行う。DB 障害時は readinessProbe が失敗してトラフィックが遮断され、フェイルオーバー完了後に自動回復する。
+
 ## CI/CD フロー
 
 ```
@@ -76,7 +105,9 @@ push to main
         ├─ GHCR (ghcr.io/okccl/sample-backend) にプッシュ
         └─► update-gitops.yaml
               └─► platform-gitops に repository_dispatch を送信
-                    └─► ArgoCD が新しいイメージタグで自動同期
+                    └─► gitops/update-sample-backend-{tag} ブランチを作成
+                          └─► PR 作成 → squash merge → ブランチ自動削除
+                                └─► ArgoCD が新しいイメージタグで自動同期
 ```
 
 ## ローカル開発
