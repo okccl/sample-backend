@@ -1,1 +1,8 @@
-../platform-infra/.mise.toml
+# アプリ開発者向けツール定義
+# PEツール（k3d / sops / age / helm）は platform-infra/.mise.toml で管理
+
+[tools]
+kubectl = "1.35.3"
+argocd  = "3.2.9"
+gh      = "2.87.2"
+"github:hatoo/oha" = "1.14.0"
