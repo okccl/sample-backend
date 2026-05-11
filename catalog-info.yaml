@@ -4,7 +4,7 @@ metadata:
   name: sample-backend
   description: FastAPI + PostgreSQL によるサンプル API
   annotations:
-    github.com/project-slug: ccl-labs/sample-backend
+    github.com/project-slug: okccl/sample-backend
     grafana/dashboard-url: https://grafana.platform.local/d/adm2mk6/sample-app-quick-view
   tags:
     - python
